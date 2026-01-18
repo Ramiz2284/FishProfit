@@ -16,7 +16,14 @@ function saveBatches(batches) {
 }
 
 function calcBatch(batch) {
-	const revenue = batch.outputKg * batch.pricePerKg * (1 - batch.discount)
+	// Выручка: либо из продаж, либо по старой формуле
+	let revenue
+	if (batch.sales && batch.sales.length > 0) {
+		revenue = batch.sales.reduce((sum, sale) => sum + sale.totalPrice, 0)
+	} else {
+		revenue = batch.outputKg * batch.pricePerKg * (1 - batch.discount)
+	}
+
 	const variableCosts =
 		batch.electricity + batch.water + batch.fuel + batch.packaging
 	const profit = revenue - batch.purchaseCost - variableCosts
@@ -59,6 +66,7 @@ export default function App() {
 				water: 0,
 				fuel: 0,
 				packaging: 0,
+				sales: [],
 			},
 		])
 	}
@@ -73,6 +81,37 @@ export default function App() {
 
 	const removeBatch = id => {
 		setBatches(batches.filter(b => b.id !== id))
+	}
+
+	const addSale = (batchId, gramsAmount, totalPrice) => {
+		setBatches(
+			batches.map(b =>
+				b.id === batchId
+					? {
+							...b,
+							sales: [
+								...(b.sales || []),
+								{
+									id: crypto.randomUUID(),
+									gramsAmount: Number(gramsAmount),
+									totalPrice: Number(totalPrice),
+									dateTime: new Date().toISOString(),
+								},
+							],
+					  }
+					: b
+			)
+		)
+	}
+
+	const removeSale = (batchId, saleId) => {
+		setBatches(
+			batches.map(b =>
+				b.id === batchId
+					? { ...b, sales: b.sales.filter(s => s.id !== saleId) }
+					: b
+			)
+		)
 	}
 
 	const totalProfit = batches.reduce((sum, b) => sum + calcBatch(b).profit, 0)
@@ -96,6 +135,16 @@ export default function App() {
 						}`}
 					>
 						Партии
+					</button>
+					<button
+						onClick={() => setView('sales')}
+						className={`flex-1 py-2.5 sm:py-3 rounded-lg sm:rounded-xl font-medium transition ${
+							view === 'sales'
+								? 'bg-blue-600 text-white shadow'
+								: 'border border-slate-300 text-slate-700 hover:bg-slate-50'
+						}`}
+					>
+						Продажи
 					</button>
 					<button
 						onClick={() => setView('month')}
@@ -309,6 +358,156 @@ export default function App() {
 							})}
 						</div>
 					</>
+				)}
+
+				{view === 'sales' && (
+					<div className='space-y-3 sm:space-y-4'>
+						{batches.length === 0 ? (
+							<div className='text-center text-slate-500 py-8'>
+								Нет партий. Сначала добавьте партию на вкладке "Партии"
+							</div>
+						) : (
+							batches.map(b => {
+								const { revenue, profit, margin } = calcBatch(b)
+								const totalGrams = (b.sales || []).reduce(
+									(sum, s) => sum + s.gramsAmount,
+									0
+								)
+								return (
+									<div
+										key={b.id}
+										className='border border-slate-200 rounded-lg sm:rounded-xl p-3 sm:p-4 shadow-sm bg-white space-y-3'
+									>
+										<div className='flex justify-between items-start gap-2'>
+											<div className='flex-1'>
+												<div className='text-sm font-medium text-slate-600'>
+													Партия от {b.date}
+												</div>
+												<div className='text-xs text-slate-500'>
+													Закупка: {b.purchaseCost}tl | Выход: {b.outputKg}кг
+												</div>
+											</div>
+											<div className='text-right'>
+												<div className='text-xs text-slate-600'>
+													Реализовано
+												</div>
+												<div className='font-bold text-blue-700'>
+													{totalGrams}г
+												</div>
+											</div>
+										</div>
+
+										{(b.sales || []).length > 0 && (
+											<div className='bg-slate-50 rounded p-2 space-y-1'>
+												{b.sales.map(sale => (
+													<div
+														key={sale.id}
+														className='flex justify-between items-center gap-2 text-xs'
+													>
+														<span className='text-slate-600'>
+															{sale.gramsAmount}г =
+															<span className='font-medium'>
+																{sale.totalPrice.toFixed(0)}tl
+															</span>
+														</span>
+														<button
+															onClick={() => removeSale(b.id, sale.id)}
+															className='text-red-500 hover:bg-red-100 rounded px-1 transition'
+															title='Удалить'
+														>
+															✕
+														</button>
+													</div>
+												))}
+											</div>
+										)}
+
+										<div className='grid grid-cols-2 gap-2 pt-2 border-t border-slate-200'>
+											<input
+												type='number'
+												placeholder='Граммы'
+												id={`grams-${b.id}`}
+												className='border border-slate-300 rounded-lg p-2 w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+											/>
+											<input
+												type='number'
+												placeholder='Сумма, лир'
+												id={`price-${b.id}`}
+												className='border border-slate-300 rounded-lg p-2 w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+											/>
+										</div>
+										<button
+											onClick={() => {
+												const gramsInput = document.getElementById(
+													`grams-${b.id}`
+												)
+												const priceInput = document.getElementById(
+													`price-${b.id}`
+												)
+												if (gramsInput.value && priceInput.value) {
+													addSale(b.id, gramsInput.value, priceInput.value)
+													gramsInput.value = ''
+													priceInput.value = ''
+												}
+											}}
+											className='w-full px-3 py-2 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition'
+										>
+											+ Добавить продажу
+										</button>
+
+										<div className='grid grid-cols-3 gap-2 pt-2 border-t border-slate-200 text-xs sm:text-sm'>
+											<div className='bg-blue-50 rounded p-2'>
+												<div className='text-slate-600 font-medium'>
+													Выручка
+												</div>
+												<div className='font-bold text-blue-700'>
+													{revenue.toFixed(0)}tl
+												</div>
+											</div>
+											<div
+												className={`rounded p-2 ${
+													profit < 0 ? 'bg-red-50' : 'bg-green-50'
+												}`}
+											>
+												<div className='text-slate-600 font-medium'>
+													Прибыль
+												</div>
+												<div
+													className={`font-bold ${
+														profit < 0 ? 'text-red-700' : 'text-green-700'
+													}`}
+												>
+													{profit.toFixed(0)}tl
+												</div>
+											</div>
+											<div
+												className={`rounded p-2 ${
+													margin < 0.3
+														? 'bg-red-50'
+														: margin < 0.4
+														? 'bg-yellow-50'
+														: 'bg-green-50'
+												}`}
+											>
+												<div className='text-slate-600 font-medium'>Маржа</div>
+												<div
+													className={`font-bold ${
+														margin < 0.3
+															? 'text-red-700'
+															: margin < 0.4
+															? 'text-yellow-700'
+															: 'text-green-700'
+													}`}
+												>
+													{(margin * 100).toFixed(1)}%
+												</div>
+											</div>
+										</div>
+									</div>
+								)
+							})
+						)}
+					</div>
 				)}
 
 				{view === 'month' && (
