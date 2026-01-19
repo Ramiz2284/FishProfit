@@ -15,6 +15,16 @@ function saveBatches(batches) {
 	localStorage.setItem(STORAGE_KEY, JSON.stringify(batches))
 }
 
+function getSalesStats(batch) {
+	if (!batch.sales || batch.sales.length === 0) {
+		return { totalGrams: 0, totalRevenue: 0, avgPrice: 0 }
+	}
+	const totalGrams = batch.sales.reduce((sum, s) => sum + s.gramsAmount, 0)
+	const totalRevenue = batch.sales.reduce((sum, s) => sum + s.totalPrice, 0)
+	const avgPrice = totalGrams > 0 ? (totalRevenue / totalGrams) * 1000 : 0
+	return { totalGrams, totalRevenue, avgPrice }
+}
+
 function calcBatch(batch) {
 	// Выручка: либо из продаж, либо по старой формуле
 	let revenue
@@ -170,6 +180,14 @@ export default function App() {
 						<div className='space-y-3 sm:space-y-4'>
 							{batches.map(b => {
 								const { revenue, profit, margin } = calcBatch(b)
+								const hasSales = b.sales && b.sales.length > 0
+								const salesStats = getSalesStats(b)
+								const displayOutputKg = hasSales
+									? salesStats.totalGrams / 1000
+									: b.outputKg
+								const displayPricePerKg = hasSales
+									? salesStats.avgPrice
+									: b.pricePerKg
 								return (
 									<div
 										key={b.id}
@@ -213,11 +231,17 @@ export default function App() {
 												</label>
 												<input
 													type='number'
-													value={b.outputKg}
+													value={displayOutputKg}
 													onChange={e =>
+														!hasSales &&
 														updateBatch(b.id, 'outputKg', e.target.value)
 													}
-													className='border border-slate-300 rounded-lg p-2 w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+													disabled={hasSales}
+													className={`border border-slate-300 rounded-lg p-2 w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+														hasSales
+															? 'bg-slate-100 text-slate-600 cursor-not-allowed'
+															: ''
+													}`}
 												/>
 											</div>
 											<div>
@@ -226,11 +250,17 @@ export default function App() {
 												</label>
 												<input
 													type='number'
-													value={b.pricePerKg}
+													value={displayPricePerKg}
 													onChange={e =>
+														!hasSales &&
 														updateBatch(b.id, 'pricePerKg', e.target.value)
 													}
-													className='border border-slate-300 rounded-lg p-2 w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+													disabled={hasSales}
+													className={`border border-slate-300 rounded-lg p-2 w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+														hasSales
+															? 'bg-slate-100 text-slate-600 cursor-not-allowed'
+															: ''
+													}`}
 												/>
 											</div>
 											<div>
@@ -369,10 +399,8 @@ export default function App() {
 						) : (
 							batches.map(b => {
 								const { revenue, profit, margin } = calcBatch(b)
-								const totalGrams = (b.sales || []).reduce(
-									(sum, s) => sum + s.gramsAmount,
-									0
-								)
+								const salesStats = getSalesStats(b)
+								const totalGrams = salesStats.totalGrams
 								return (
 									<div
 										key={b.id}
@@ -384,7 +412,8 @@ export default function App() {
 													Партия от {b.date}
 												</div>
 												<div className='text-xs text-slate-500'>
-													Закупка: {b.purchaseCost}tl | Выход: {b.outputKg}кг
+													Закупка: {b.purchaseCost}tl | Выход:{' '}
+													{(totalGrams / 1000).toFixed(2)}кг
 												</div>
 											</div>
 											<div className='text-right'>
